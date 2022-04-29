@@ -48,10 +48,10 @@ class ligPrep:
         return self.mol_path.split(".")[-1]
 
     def _loadRWMol(self):
-        #  if self._getFileFormat() == "mol2" and not self.addH:
-        #      self._loadMolWithRW(self.mol_path)
-        #  else:
-        self._loadMolWithOB()
+        if self._getFileFormat() == "mol2" and not self.addH:
+            self._loadMolWithRW(self.mol_path)
+        else:
+            self._loadMolWithOB()
 
     def _loadMolWithRW(self, mol_path, sanitize=True):
         rd_mol = Chem.rdmolfiles.MolFromMol2File(mol_path, sanitize=sanitize, removeHs=False)
@@ -166,7 +166,8 @@ class ligPrep:
 
         cluster_conf_id = defaultdict(list)
         whitened = whiten(dist_matrix)
-        centroids, _ = kmeans(whitened, n_group)
+        whitened = dist_matrix
+        centroids, _ = kmeans(whitened, n_group*3)
         cluster, _ = vq(whitened,centroids)
         for key, value in zip(cluster, conformerIds):
             cluster_conf_id[key].append(value)
@@ -218,6 +219,7 @@ class ligPrep:
         i = 0
         for fl_names in cluster_conf.values():
             for j, fl_name in enumerate(fl_names):
+                print(fl_name)
                 e = float(confs_energies.loc[confs_energies["FileName"] == fl_name, " Energy(eV)"].item())
                 if i == 0:
                     global_minE = e
@@ -242,7 +244,7 @@ class ligPrep:
                     print("Removed", rm_file)
                     os.remove(f"{conf_dir}/{rm_file}")
 
-        # file which has global minimum enery renamed 
+        # file which has global minimum enery renamed
         os.rename(f"{conf_dir}/pruned_{global_minE_file}", f"{conf_dir}/global_minE_{global_minE_file}")
 
     def genMinEGonformer(self, file_path,
@@ -291,7 +293,10 @@ class ligPrep:
         #  for k-means clutering
         minEConformerIDs = []
         for cluster, clustered_confIds in cluster_conf_id.items():
-
+            #print(clustered_confIds)
+            minEConformerID = [clustered_confIds[i] for i in [0,int(len(clustered_confIds)/2),-1] ]
+            #print(minEConformerID)
+            #a
             if saveConfs:
                 CONF_DIR = self.WORK_DIR + f"/confs_cluster_{cluster}"
                 if not os.path.exists(CONF_DIR):
@@ -303,26 +308,26 @@ class ligPrep:
                     prefix = ""
                     conf_file_path = "%s/conf_%d.sdf"%(CONF_DIR, conformerId)
                     self._writeConf2File(mol, conformerId, conf_file_path)
-
                 #create ase atoms
-                ase_atoms = self._rwConformer2AseAtoms(mol, conformerId)
-                if mmCalculator:
-                    e = self._calcEnergyWithMM(mol, conformerId, 100)["energy_abs"]
-                else:
-                    e = self._calcSPEnergy(mol, conformerId)
+                #ase_atoms = self._rwConformer2AseAtoms(mol, conformerId)
+                #if mmCalculator:
+                    #e = self._calcEnergyWithMM(mol, conformerId, 100)["energy_abs"]
+                #else:
+                    #e = self._calcSPEnergy(mol, conformerId)
+#
+                #if i == 0:
+                    #minE = e
+                    #minEConformerID = conformerId
+                    #minE_ase_atoms = ase_atoms
+                #else:
+                    #if minE > e:
+                        #minE = e
+                        #minEConformerID = conformerId
+                        #minE_ase_atoms = ase_atoms
+                #print("%sconf_%d.sdf, %s"%(prefix, conformerId, e), file=file_csv)
 
-                if i == 0:
-                    minE = e
-                    minEConformerID = conformerId
-                    minE_ase_atoms = ase_atoms
-                else:
-                    if minE > e:
-                        minE = e
-                        minEConformerID = conformerId
-                        minE_ase_atoms = ase_atoms
-                print("%sconf_%d.sdf, %s"%(prefix, conformerId, e), file=file_csv)
-
-            minEConformerIDs.append(minEConformerID)
+            if not  minEConformerID in minEConformerIDs:
+                minEConformerIDs += minEConformerID
 
             #  print(minE, minEGonformerID)
             #  if numConfs > 1:
@@ -340,9 +345,9 @@ class ligPrep:
             #      print("!!! INITIAL structure as is minimun energy conformer !!!")
 
         # test
-        assert len(minEConformerIDs) == len(cluster_conf_id.keys())
+        #assert len(minEConformerIDs) == len(cluster_conf_id.keys())
         # close to csv file
-        file_csv.close()
+        #file_csv.close()
 
         MIN_E_CONF_DIR = self.WORK_DIR + "/opt_minE_confs"
         if not os.path.exists(MIN_E_CONF_DIR):
@@ -351,7 +356,8 @@ class ligPrep:
         if optimization_conf:
             opt_file_csv = open("%s/opt_confs_energies.csv" %MIN_E_CONF_DIR, "w")
             print("FileName, Energy(eV)", file=opt_file_csv)
-
+            minEConformerIDs = set(minEConformerIDs)
+            minEConformerIDs = list(minEConformerIDs)
             for i, conformerId  in enumerate(minEConformerIDs):
                 e, ase_atoms = self._geomOptimizationConf(mol, conformerId)
                 prefix = "opt_"
@@ -430,6 +436,8 @@ class ligPrep:
         ase_atoms = self._rwConformer2AseAtoms(mol, conformerId)
         #  from ase.io import write
         #  write("test_ase_atoms.xyz", ase_atoms)
+        #import torchani
+        #calculator = torchani.models.ANI2x().to("cpu").ase()
         ase_atoms.set_calculator(self.calculator)
 
         return ase_atoms.get_potential_energy()
@@ -485,7 +493,7 @@ class ligPrep:
 
         if self.optG16:
             dyn =  GaussianOptimizer(ase_atoms, self.calculator)
-            dyn.run(fmax='tight', steps=self.maxiter)
+            dyn.run(fmax='tight', steps=int(self.maxiter))
         else:
             ase_atoms.set_calculator(self.calculator)
             dyn = self._getOptMethod(ase_atoms)
@@ -515,7 +523,7 @@ class ligPrep:
 
         if self.optG16:
             dyn =  GaussianOptimizer(ase_atoms, self.calculator)
-            dyn.run(fmax='tight', steps=self.maxiter)
+            dyn.run(fmax='tight', steps=int(self.maxiter))
         else:
             ase_atoms.set_calculator(self.calculator)
             #  self.dyn = LBFGS(ase_atoms)

@@ -61,7 +61,7 @@ def setG16calculator(lig, file_base, label, WORK_DIR):
             label="%s/g16_%s/%s"%(WORK_DIR, label, file_base),
             chk="%s.chk"%file_base,
             nprocs=nprocs,
-            xc="HF",
+            xc="wb97x",
             basis="6-31g*",
             scf="maxcycle=100",
             extra="Pop=(MK) IOP(6/50=1)",
@@ -111,7 +111,7 @@ def runLigPrep(file_name):
             mmCalculator=True
 
     # set optimizetion parameters
-    lig.setOptParams(fmax=thr_fmax, maxiter=1000)
+    lig.setOptParams(fmax=thr_fmax, maxiter=maxiter)
 
     if pre_optimization_lig:
         print("G16 Optimization process.. before generations")
@@ -174,12 +174,12 @@ if __name__ == "__main__":
 
     for file_name in file_names:
         file_base = file_name.split(".")[0]
-        try:
-            runLigPrep(file_name)
-            os.system("bash ligPrepHelper.sh %s" %file_base)
-        except:
-            print("Error for %s file !!! Skipping...")
-            failed_csv.write(file_name+",\n")
+        #try:
+        runLigPrep(file_name)
+            #os.system("bash ligPrepHelper.sh %s" %file_base)
+        #except:
+            #print("Error for %s file !!! Skipping...")
+            #failed_csv.write(file_name+",\n")
         #  break
     failed_csv.close()
 
